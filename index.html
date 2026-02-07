@@ -175,24 +175,10 @@
                 Download All
             </button>
 
-            <div id="popup">
-                <h3>Download QRs as ZIP</h3>
-                <button onclick="downloadAllAsZip('png')">PNG ZIP</button>
-                <button onclick="downloadAllAsZip('jpg')">JPG ZIP</button>
-                <button onclick="downloadAllAsZip('svg')">SVG ZIP</button>
-                <button onclick="downloadAllAsZip('pdf')">PDF ZIP</button>
-            </div>
-
-
             <div id="qrGrid" class="grid"></div>
             <div id="emptyMsg" class="empty">QR codes will appear here</div>
         </div>
     </div>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
     <script>
         async function generateQrs() {
@@ -246,56 +232,7 @@
             }
         }
     </script>
-
-    <script>
-        async function downloadAllAsZip(format) {
-            const zip = new JSZip();
-            const folder = zip.folder("qr-codes");
-
-            for (const qr of qrStore) {
-                const name = qr.text.replace(/\s+/g, "_");
-
-                if (format === "png" || format === "jpg") {
-                    const base64 = qr.base64;
-                    folder.file(
-                        `${name}.${format}`,
-                        base64,
-                        { base64: true }
-                    );
-                }
-
-                else if (format === "svg") {
-                    folder.file(`${name}.svg`, qr.svg);
-                }
-
-                else if (format === "pdf") {
-                    const pdfBlob = await createPdfBlob(qr);
-                    folder.file(`${name}.pdf`, pdfBlob);
-                }
-            }
-
-            const content = await zip.generateAsync({ type: "blob" });
-            saveAs(content, `qr-codes-${format}.zip`);
-        }
-
-        function createPdfBlob(qr) {
-            return new Promise(resolve => {
-                const { jsPDF } = window.jspdf;
-                const pdf = new jsPDF();
-                const img = new Image();
-
-                img.onload = () => {
-                    pdf.text(qr.text, 10, 15);
-                    pdf.addImage(img, "PNG", 20, 25, 170, 170);
-                    resolve(pdf.output("blob"));
-                };
-
-                img.src = qr.base64;
-            });
-        }
-
-
-    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
     <script>
         let qrStore = []; // { text, base64 }
