@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Multi QR Generator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: #f3f4f6;
+            font-family: system-ui, sans-serif;
+            min-height: 100vh;
+            padding: 16px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 950px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+        }
+
+        h1 {
+            margin: 0 0 6px;
+            text-align: center;
+        }
+
+        p {
+            margin: 0 0 14px;
+            text-align: center;
+            font-size: 14px;
+            color: #6b7280;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 80px;
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px solid #ddd;
+            font-size: 14px;
+            resize: vertical;
+            outline: none;
+        }
+
+        textarea:focus {
+            border-color: #4f46e5;
+        }
+
+        button {
+            margin-top: 12px;
+            padding: 12px 18px;
+            border-radius: 12px;
+            border: none;
+            background: #4f46e5;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            float: right;
+        }
+
+        .grid {
+            margin-top: 24px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 16px;
+        }
+
+        .qr-card {
+            background: #f9fafb;
+            padding: 12px;
+            border-radius: 14px;
+            text-align: center;
+            box-shadow: inset 0 0 0 1px #eee;
+        }
+
+        .qr-card img {
+            width: 100%;
+            height: auto;
+        }
+
+        .label {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #374151;
+            word-break: break-word;
+        }
+
+        .empty {
+            margin-top: 30px;
+            text-align: center;
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        @media (max-width: 480px) {
+            button {
+                width: 100%;
+                float: none;
+            }
+        }
+
+        .modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.4);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 14px;
+            width: 90%;
+            max-width: 320px;
+            text-align: center;
+        }
+
+        .modal-content h3 {
+            margin-top: 0;
+        }
+
+        select {
+            width: 100%;
+            padding: 10px;
+            border-radius: 10px;
+            margin-top: 10px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .modal-actions button {
+            flex: 1;
+        }
+
+        .secondary {
+            background: #e5e7eb;
+            color: #111;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <div class="card">
+            <h1>Multi QR Generator</h1>
+            <p>Enter comma-separated values</p>
+
+            <textarea id="inputText" placeholder="INV-001, INV-002, INV-003"></textarea>
+
+            <button onclick="generateQrs()">Generate</button>
+            <button onclick="openDownloadModal()" id="downloadBtn" style="display:none">
+                Download All
+            </button>
+
+            <div id="popup">
+                <h3>Download QRs as ZIP</h3>
+                <button onclick="downloadAllAsZip('png')">PNG ZIP</button>
+                <button onclick="downloadAllAsZip('jpg')">JPG ZIP</button>
+                <button onclick="downloadAllAsZip('svg')">SVG ZIP</button>
+                <button onclick="downloadAllAsZip('pdf')">PDF ZIP</button>
+            </div>
+
+
+            <div id="qrGrid" class="grid"></div>
+            <div id="emptyMsg" class="empty">QR codes will appear here</div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <script>
+        async function generateQrs() {
+            const raw = document.getElementById("inputText").value;
+
+            const values = raw
+                .split(",")
+                .map(v => v.trim())
+                .filter(Boolean);
+
+            const grid = document.getElementById("qrGrid");
+            const emptyMsg = document.getElementById("emptyMsg");
+
+            grid.innerHTML = "";
+            emptyMsg.style.display = values.length ? "none" : "block";
+
+            for (const text of values) {
+                try {
+                    const res = await fetch("http://localhost:3000/generate", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ text })
+                    });
+
+                    const json = await res.json();
+
+                    storeQr(json.text, json.qrCode);
+
+
+                    if (!res.ok || json.success !== true) {
+                        throw new Error("QR generation failed");
+                    }
+
+                    const card = document.createElement("div");
+                    card.className = "qr-card";
+
+                    const img = document.createElement("img");
+                    img.src = json.qrCode;
+
+                    const label = document.createElement("div");
+                    label.className = "label";
+                    label.textContent = json.text;
+
+                    card.appendChild(img);
+                    card.appendChild(label);
+                    grid.appendChild(card);
+
+                } catch (e) {
+                    console.error("QR failed for:", text, e);
+                }
+            }
+        }
+    </script>
+
+    <script>
+        async function downloadAllAsZip(format) {
+            const zip = new JSZip();
+            const folder = zip.folder("qr-codes");
+
+            for (const qr of qrStore) {
+                const name = qr.text.replace(/\s+/g, "_");
+
+                if (format === "png" || format === "jpg") {
+                    const base64 = qr.base64;
+                    folder.file(
+                        `${name}.${format}`,
+                        base64,
+                        { base64: true }
+                    );
+                }
+
+                else if (format === "svg") {
+                    folder.file(`${name}.svg`, qr.svg);
+                }
+
+                else if (format === "pdf") {
+                    const pdfBlob = await createPdfBlob(qr);
+                    folder.file(`${name}.pdf`, pdfBlob);
+                }
+            }
+
+            const content = await zip.generateAsync({ type: "blob" });
+            saveAs(content, `qr-codes-${format}.zip`);
+        }
+
+        function createPdfBlob(qr) {
+            return new Promise(resolve => {
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF();
+                const img = new Image();
+
+                img.onload = () => {
+                    pdf.text(qr.text, 10, 15);
+                    pdf.addImage(img, "PNG", 20, 25, 170, 170);
+                    resolve(pdf.output("blob"));
+                };
+
+                img.src = qr.base64;
+            });
+        }
+
+
+    </script>
+
+    <script>
+        let qrStore = []; // { text, base64 }
+
+        // SAVE generated QRs
+        function storeQr(text, base64) {
+            qrStore.push({ text, base64 });
+            document.getElementById("downloadBtn").style.display = "block";
+        }
+
+        function openDownloadModal() {
+            document.getElementById("downloadModal").style.display = "flex";
+        }
+
+        function closeModal() {
+            document.getElementById("downloadModal").style.display = "none";
+        }
+
+        function downloadAll() {
+            const format = document.getElementById("formatSelect").value;
+            closeModal();
+
+            qrStore.forEach((qr, index) => {
+                if (format === "png") downloadPng(qr);
+                if (format === "jpg") downloadJpg(qr);
+                if (format === "svg") downloadSvg(qr);
+                if (format === "pdf") downloadPdf(qr, index);
+            });
+        }
+
+        function downloadPng(qr) {
+            // forceDownload(
+            //   `${qr.base64}`,
+            //   `${qr.text}.png`
+            // );
+            triggerDownload(
+                `${qr.base64}`,
+                `${qr.text}.png`
+            );
+        }
+
+        function downloadJpg(qr) {
+            convertAndDownload(qr, "image/jpeg", `${qr.text}.jpg`);
+        }
+
+        function downloadSvg(qr) {
+            const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="300" height="300">
+        <image href="${qr.base64}" width="300" height="300"/>
+      </svg>`;
+            const blob = new Blob([svg], { type: "image/svg+xml" });
+            triggerDownload(URL.createObjectURL(blob), `${qr.text}.svg`);
+        }
+
+        function downloadPdf(qr, index) {
+            // convertAndDownload(qr, "application/pdf", `${qr.text}.pdf`);
+            downloadPdf(qr);
+        }
+
+        function downloadPdf(qr) {
+            if (!window.jspdf) {
+                alert("jsPDF not loaded");
+                return;
+            }
+
+            const { jsPDF } = window.jspdf;
+            const img = new Image();
+
+            img.onload = () => {
+                const pdf = new jsPDF("p", "mm", "a4");
+
+                pdf.setFontSize(14);
+                pdf.text(qr.text, 20, 20);
+
+                pdf.addImage(
+                    img,
+                    "PNG",
+                    20,
+                    30,
+                    170,
+                    170
+                );
+
+                pdf.save(qr.text + ".pdf");
+            };
+
+            img.onerror = () => alert("Image load failed");
+
+            img.src = qr.base64;
+        }
+
+
+        function convertAndDownload(qr, mime, filename) {
+            const img = new Image();
+            img.src = `${qr.base64}`;
+            img.onload = () => {
+                const canvas = document.createElement("canvas");
+                canvas.width = img.width;
+                canvas.height = img.height;
+                canvas.getContext("2d").drawImage(img, 0, 0);
+
+                triggerDownload(canvas.toDataURL(mime), filename);
+            };
+        }
+
+        function triggerDownload(url, filename) {
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+
+        function forceDownload(dataUrl, filename) {
+            const a = document.createElement("a");
+            a.href = dataUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+
+    </script>
+
+
+    <div id="downloadModal" class="modal">
+        <div class="modal-content">
+            <h3>Download QR Codes</h3>
+
+            <select id="formatSelect">
+                <option value="png">PNG</option>
+                <option value="jpg">JPG</option>
+                <option value="svg">SVG</option>
+                <option value="pdf">PDF</option>
+            </select>
+
+            <div class="modal-actions">
+                <button onclick="downloadAll()">Download</button>
+                <button class="secondary" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+
+</body>
+
+</html>
