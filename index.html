@@ -197,7 +197,7 @@
 
             for (const text of values) {
                 try {
-                    const res = await fetch("http://localhost:3000/generate", {
+                    const res = await fetch("https://ptb06fb4h4.execute-api.ap-south-1.amazonaws.com/test/resource-1", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ text })
